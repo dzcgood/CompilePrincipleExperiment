@@ -2,9 +2,11 @@ FORMS += \
     mainwidget.ui
 
 HEADERS += \
+    Utility.h \
     mainwidget.h
 
 SOURCES += \
+    Utility.cpp \
     main.cpp \
     mainwidget.cpp
 
