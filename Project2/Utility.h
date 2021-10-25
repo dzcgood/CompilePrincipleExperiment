@@ -1,6 +1,8 @@
 #ifndef UTILITY_H
 #define UTILITY_H
-#include"vector"
+#include<vector>
+#include<set>
+#include<string>
 using namespace std;
 const int DEFAULT_ID = -1;
 const char DEFAULT_WORD = ' ';
@@ -13,6 +15,12 @@ enum State{
     START,END,NORMAL
 };
 
+
+/**
+    #####################################################
+                            NFA的相关定义
+    #####################################################
+*/
 /**
     NFA的边，先声明，在NFANode中要用到，稍后定义
 */
@@ -86,5 +94,82 @@ public:
     //获取startNode的id
     int getStartId() const;
 };
+
+
+
+/**
+    #####################################################
+                            DFA的相关定义
+    #####################################################
+*/
+//DFA结点，先做声明，稍后定义
+struct DFANode;
+
+//DFA边
+struct DFAEdge
+{
+    //边指向的结点
+    DFANode * next;
+    //处理的字符
+    char word;
+    //构造函数
+    DFAEdge(DFANode *n, char c): next(n), word(c){}
+};
+
+//DFA结点
+struct DFANode
+{
+    //该结点包含的结点编号
+    set<int> nodes;
+    //由该结点出发的边
+    vector<DFAEdge> edges;
+    //不知道这东西是干嘛的、、、、、、、、、、、、、、、、、、
+    string minName;
+    //该结点在DFA图中的状态
+    State state = NORMAL;
+    //判断结点id是否在该结点中
+    bool contains(int id);
+    //在该结点插入id
+    void insert(int id);
+    //在该结点插入边
+    void insert(DFAEdge edge);
+    //将两个结点合成一个结点
+    void unionNode(DFANode * node);
+    //该结点处理字符c后转变为的结点
+    DFANode * process(char c);
+    //输出该结点信息 如： {1，2，4，6}
+    string toString();
+};
+
+//DFA类
+
+class DFA
+{
+public:
+    //DFA图的结点
+    vector<DFANode*> graph;
+    //通过id返回图的结点
+    vector<DFANode*> getNodes(int id);
+    //DFA图最小开始结点
+    DFANode *minStartNode;
+    //DFA图最小结束结点
+    vector<DFANode*> minEndNodes;
+    //能处理的字符
+    set<char> wordList;
+    //建一个新结点
+    DFANode* crateNewNode(int id);
+    //判断两个结点的转化是否等价，若转化后是同一个结点，则等价
+    static bool equals(DFANode *node1, DFANode *node2, set<char> words);
+    //判断该结点是否为结束结点
+    bool isEndNode(DFANode *node) const;
+    //从当前DFA中删除某个结点
+    void delNode(DFANode *node);
+    //获取该结点的c语言代码，n是结点指针，lines是生成的代码，tabNumber是缩进数
+    void getCode(DFANode *n, vector<string> &lines, int tabNumber);
+private:
+    //获取缩进的空格
+    string getTabs(int tabNumber);
+};
+
 
 #endif // UTILITY_H
