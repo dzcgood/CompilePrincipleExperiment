@@ -5,7 +5,9 @@
 #include"Utility.h"
 #include<vector>
 #include<iterator>
-
+#include<iostream>
+#include<queue>
+#include<string.h>
 
 /**
     #####################################################
@@ -41,7 +43,8 @@ NFA::NFA(char c)
 /**
     this | nfa
     实现思路：新建startNode和endNode，将二者连接
-    这里只考虑了二分支的情况，多分支的情况具体交给读取程序。。。。还没看到这部分。。。。先欠着
+    这里只考虑了二分支的情况
+    多分支的情况具体交给读取程序,程序读出n个'|'，就会有n+1个分支，就相当于执行n次Or
 */
 void NFA::Or(const NFA &nfa)
 {
@@ -128,6 +131,13 @@ int NFA::getEndId() const
 int NFA::getStartId() const
 {
     return this -> startNode -> id;
+}
+
+//浅复制
+void NFA::operator=(const NFA &nfa)
+{
+    this -> startNode = nfa.startNode;
+    this -> endNode = nfa.endNode;
 }
 
 
@@ -406,6 +416,381 @@ string DFA::getTabs(int tabNumber)
     }
     return str;
 }
+
+
+/**
+    #####################################################
+                            Proxy的实现
+    #####################################################
+*/
+//构造函数，用正则表达式来初始化Proxy代理类
+Proxy::Proxy(const string regExp)
+{
+    //设置正则表达式
+    this -> regularExpression = regExp;
+    //产生NFA
+    this -> nfa = getNFA(this -> regularExpression);
+    //给NFA编号并初始化DFA
+    this -> serializeNFA();
+}
+
+/**
+ * 把正则表达式看成 a | b | c的形式，以'|'为分隔符号，所以要先获取'|' 的索引
+ * 这里会忽略‘()’内的'|'，因为‘()’内可以看成是另外一个正则表达式，一次递归只处理一个正则表达式
+ */
+vector<int> Proxy::getOrOperatorIndex(const string regExp)
+{
+    vector<int> index;
+    int len = regExp.length();
+    for(int i = 0; i < len; i++)
+    {
+        if(regExp[i] == '|')
+            index.push_back(i);
+        else if(regExp[i] == '(')
+        {
+            //忽略掉()内的'|'
+            int temp = getRightBracketIndex(regExp, i);
+            if(temp = -1)//说明不存在与之对应的')'
+            {
+                std::cout << "illeagal regular expression!";
+                exit(1);
+            }
+            i = temp;
+        }
+    }
+    return index;
+}
+
+//判断ch是不是字符（字母或数字）
+bool Proxy::isLetter(char ch)
+{
+    return isdigit(ch) || isalpha(ch);
+}
+
+
+//获取索引为index的左括号对应的右括号的索引，在初始化NFA的时候会用到
+int Proxy::getRightBracketIndex(const string regExp, const int leftIndex)
+{
+    //可能会出现((()))层层嵌套的情况，所以要记录在leftIndex之后，出现了几个'('
+    int newLeftBrackets = 0;
+    int len = regExp.length();
+    for(int i = leftIndex + 1; i < len; i++)
+    {
+        switch (regExp[i]){
+        case ')':
+            //新的'('个数为0的情况下，才是我们要找的')'索引
+            if(newLeftBrackets == 0)
+                return i;
+            else newLeftBrackets--;
+            break;
+        case '(':
+            //遇到新的未匹配'('，个数 + 1
+            newLeftBrackets++;
+            break;
+        default:
+            break;
+        }
+    }
+    return -1;
+}
+
+/**
+    获取NFA图，由输入的正则表达式产生NFA
+    正则表达式转NFA递归方法思路：
+    首先把(..) 看成一个单元素NFA,和a等价
+    把单个NFA看成一个或数个元素的Union，即 NFA = a[|b|c...]
+    扫描正则表达式，首先扫描 | 进行拆分递归
+    逐项建立NFA并连接对于括号进行递归处理
+*/
+NFA Proxy::getNFA(const string regExp)
+{
+    //先获取'|'的索引
+    vector<int> orIndex = getOrOperatorIndex(regExp);
+    int len = regExp.length();
+    //先按照'|'拆分正则表达式，然后以拆分好每份表达式为单位
+    if(orIndex.size() != 0)
+    {
+        //用于存放每个单位生成的NFA，最后把每个单位用类似于or的操作连起来就行了
+        vector<NFA> NFAs;
+        //正则表达式字串
+        string subReg;
+        int curIndex = 0;
+        for(size_t i = 0; i < orIndex.size(); i++)
+        {
+            subReg = regExp.substr(curIndex, orIndex[i] - curIndex);
+            curIndex = orIndex[i];
+            //将字串进行递归，生成的NFA放入NFAs
+            NFAs.push_back(getNFA(subReg));
+        }
+        //最后还有一个字串
+        subReg = regExp.substr(curIndex, regExp.size() - curIndex);
+        NFAs.push_back(getNFA(subReg));
+
+        //接下来执行类似于or的操作，NFAs里面有几个NFA，就会有几个分支
+        /*
+            大概长这样
+                  ／ o ＼
+                o  — o — o
+                  ＼ o ／
+            左右两个是新增结点，中间的叉是NFAs的元素，有几个元素，就有几个叉
+        */
+        //新增的两个结点，不管有几个叉，只需要两个新结点
+        NFANode * node1 = new NFANode();
+        NFANode * node2 = new NFANode();
+        for(NFA n : NFAs)
+        {
+            //对于每个叉，新增两条边
+            //新节点到NFA起点的边
+            NFAEdge edge1(node1, n.startNode, EPSILION);
+            //NFA结束点到新结点的边
+            NFAEdge edge2(n.endNode, node2, EPSILION);
+            //把前后结点和边建立联系
+            node1 -> outEdges.push_back(edge1);
+            n.startNode -> inEdges.push_back(edge1);
+            node2 -> inEdges.push_back(edge2);
+            n.endNode -> outEdges.push_back(edge2);
+        }
+        //各个NFA都已经连好了，接下来直接返回以node1为起点，以node2为终点的NFA图即可
+        return NFA(node1, node2);
+    }
+
+    //程序能走到这里，说明regExp已经不包含'|'了，接下来需要对括号进行处理
+
+    NFA nfa;
+    //记录当前字母和下一个字母
+    char cur, next;
+    //因为这里设计到next，为了不下标越界，将最后一个字符分开处理
+    for(int i = 0; i< len - 1; i++)
+    {
+        cur = regExp[i];
+        next = regExp[i + 1];
+        if(isLetter(cur))//如果当前字符是待匹配字符
+        {
+            //初始化一个处理字符cur的NFA
+            NFA n(cur);
+            //如果下一个元素是'*'，则需要先闭包再连接
+            if(next == '*')
+            {
+                n.Star();
+                //越过'*'
+                i++;
+            }
+            //判空
+            if(nfa.isEmpty())
+            {
+                nfa = n;
+            }
+            else//执行连接操作
+            {
+                nfa.And(n);
+            }
+        }
+        //遇见()需要递归
+        else if(cur == '(')
+        {
+            int rightBacketIndex = getRightBracketIndex(regExp, i);
+            //没有对应匹配的')' 程序终止
+            if(rightBacketIndex == -1)
+            {
+                exit(1);
+            }
+            //取出括号内的内容
+            string subReg = regExp.substr(i + 1, rightBacketIndex - i - i);
+            next = regExp[rightBacketIndex + 1];
+            if(next == '*')//需要先闭包后连接
+            {
+                if(nfa.isEmpty())
+                {
+                    nfa = getNFA(subReg);
+                    nfa.Star();
+                    i = rightBacketIndex + 1;
+                }
+                else
+                {
+                    NFA subNfa = getNFA(subReg);
+                    subNfa.Star();
+                    nfa.And(subNfa);
+                    i = rightBacketIndex + 1;
+                }
+            }
+            else//直接连接操作
+            {
+                if(nfa.isEmpty())
+                {
+                    nfa = getNFA(subReg);
+                }
+                else
+                {
+                    nfa.And(getNFA(subReg));
+                }
+            }
+        }
+    }
+    //处理最后一个字符
+    if(isLetter(regExp[len -1]))
+    {
+        if(nfa.isEmpty())
+        {
+            nfa = NFA(regExp[len - 1]);
+        }
+        else
+        {
+            nfa.And(NFA(regExp[len - 1]));
+        }
+    }
+    return nfa;
+}
+
+
+
+//给NFA的结点编号并建立初始DFA结点
+void Proxy::serializeNFA()
+{
+    //空NFA图，直接结束
+    if(nfa.isEmpty())
+        return;
+    //先设置好NFA图的开始结点和结束结点
+    nfa.startNode -> state = START;
+    nfa.endNode -> state = END;
+    //指针
+    NFANode * beginNode = nfa.startNode;
+    //用于编号，第一个结点的编号为1
+    int id = 1;
+    beginNode -> id = id++;
+    //
+    NFANode *nfaNode;
+    DFANode *dfaNode;
+    /*
+        接下来开始寻找可建立的DFANode，最后找到的是n个EPSILION闭包，每个闭包构成一个DFANdoe
+        que1用于寻找DFANode，que2用于寻找某个DFANode的EPSILION闭包
+        简单地说，每一个DFANode就是一个状态集合
+    */
+    //采用广度优先方法
+    queue<NFANode*> que1,que2;
+    que1.push(beginNode);
+    //设置bool数组，以防止反复地以同一结点建立EPSILION闭包
+    bool visited[MAX_NODE_NUMBER];
+    memset(visited, false, sizeof(visited));
+    while(!que1.empty())
+    {
+        //取出队首元素
+        nfaNode = que1.front();
+        que1.pop();
+        //建一个新DFANode
+        dfaNode = dfa.crateNewNode(nfaNode -> id);
+        //设置该结点已被访问
+        visited[nfaNode -> id] = true;
+        //接下来开始寻找这个DFANode的EPSILION闭包
+        //防止重复访问
+        bool visited1[MAX_NODE_NUMBER];
+        memset(visited1, false, sizeof(visited1));
+        que2.push(nfaNode);
+        while(!que2.empty())
+        {
+            nfaNode = que2.front();
+            que2.pop();
+            visited1[nfaNode -> id] = true;
+            //开始遍历从nfaNode出发的边
+            for(NFAEdge edge : nfaNode -> outEdges)
+            {
+                //如果这条边指向的结点还未被编号，就给它编号
+                if(edge.endNode -> id == DEFAULT_ID)
+                {
+                    edge.endNode -> id = id++;
+                }
+                //在图表中将这条边记录下来
+                chart[edge.startNode -> id][edge.endNode -> id] = edge.word;
+                //如果这条边是处理字符EPSILION的
+                if(edge.word == EPSILION)
+                {
+                    //就加入此DFANode的EPSILION闭包
+                    dfaNode -> insert(edge.endNode -> id);
+                    //如果edge.endNode还被没访问过，就加入que2
+                    if(!visited1[edge.endNode -> id])
+                    {
+                        que2.push(edge.endNode);
+                    }
+                }
+                else//说明不是处理EPSILION的
+                {
+                    //将edge -> word加入到此DFA图能处理的字符中
+                    wordList.insert(edge.word);
+                    //如果这个点还么被访问过，就需要新建一个DFANode了
+                    if(!visited[edge.endNode -> id])
+                    {
+                        que1.push(edge.endNode);
+                        //这样可以防止队列中出现重复元素
+                        visited[edge.endNode -> id] = true;
+                    }
+                }
+            }
+        }
+        //如果此DFANode是终止点，修改其状态
+        if(dfaNode -> contains(nfa.getEndId()))
+        {
+            nfaNode -> state = END;
+        }
+    }
+    //进一步处理这些建立好的DFANode
+    processDFA();
+}
+
+/**
+    初始化DFA后，只是建立了DFA的结点，但是结点与结点之间的关系并没有确定，所以需要进一步处理
+*/
+void Proxy::processDFA()
+{
+
+}
+
+//最小化DFA
+void Proxy::minimizeDFA()
+{
+
+}
+
+
+//最小DFA图后处理
+void Proxy::processMinDFA()
+{
+
+}
+
+
+/*
+    生成c语言代码
+    从finalDFA的开始结点获取code即可
+*/
+void Proxy::generateCode()
+{
+    this -> code = "";
+    vector<string> lines;
+    DFANode * node = this -> finalDFA.minStartNode;
+    finalDFA.getCode(node, lines, 0);
+    for(string line : lines)
+    {
+        code += line;
+        code += std::to_string('\n');
+    }
+}
+
+/**
+    获取与编号为id的结点有关联的DFANode的id构成的向量
+*/
+vector<int> Proxy::getConnections(int id)
+{
+    vector<int> con;
+    for(int i = 1; i <= nfa.nodeNumber; i++)
+    {
+        //说明可以执行 id -> i的非EPSILION转换
+        if(chart[id][i] != DEFAULT_WORD && chart[id][i] != EPSILION)
+        {
+            con.push_back(i);
+        }
+    }
+    return con;
+}
+
 
 
 

@@ -7,6 +7,15 @@ using namespace std;
 const int DEFAULT_ID = -1;
 const char DEFAULT_WORD = ' ';
 const char EPSILION = '#';
+const int MAX_NODE_NUMBER = 256;
+
+/**
+    #####################################################
+                      该头文件涉及到相关类的定义
+                         包括NFA,DFA,Proxy
+    #####################################################
+*/
+
 
 /**
     定义各个结点的状态：开始，结束，普通
@@ -79,6 +88,8 @@ public:
     NFA(char c);
     //已知开始结点和结束结点
     NFA(NFANode * s, NFANode * e): startNode(s), endNode(e){}
+    //浅复制
+    void operator=(const NFA &nfa);
     // a | b 选择
     void Or(const NFA &nfa);
     // ab 连接
@@ -119,7 +130,7 @@ struct DFAEdge
 //DFA结点
 struct DFANode
 {
-    //该结点包含的结点编号
+    //该结点的EPSILION闭包
     set<int> nodes;
     //由该结点出发的边
     vector<DFAEdge> edges;
@@ -171,5 +182,60 @@ private:
     string getTabs(int tabNumber);
 };
 
+
+/**
+    #####################################################
+                        代理类Proxy的相关定义
+                        涉及对NFA和DFA的处理
+    #####################################################
+*/
+class Proxy
+{
+public:
+    //正则表达式
+    string regularExpression;
+    //NFA图
+    NFA nfa;
+    //最初始的DFA图
+    DFA dfa;
+    /*
+        经过处理后的DFA图
+        因为有好几个结点最后会合成一个结点，所以minDFA其实是有好多个vector组成的，
+        每个vector元素又包含了好几个结点，这写结点最后会被合成一个结点
+        例子： minDFA = {{1}， {3，5，7}, {2,4}, {6,8}}
+     */
+    vector<vector<DFANode *>> minDFA;
+    //最终的DFA
+    DFA finalDFA;
+    //DFA最小化生成的表格
+    char chart[MAX_NODE_NUMBER][MAX_NODE_NUMBER];
+    //最后生成的代码
+    string code;
+    //能处理的字符集
+    set<char> wordList;
+    //构造函数，用正则表达式来初始化Proxy代理类
+    Proxy(const string regExp);
+    //给NFA的结点编号并建立初始DFA结点
+    void serializeNFA();
+    //初始DFA图后处理
+    void processDFA();
+    //最小化DFA
+    void minimizeDFA();
+    //最小DFA图后处理
+    void processMinDFA();
+    //生成c语言代码
+    void generateCode();
+private:
+    //获取NFA图，由输入的正则表达式产生NFA
+    NFA getNFA(const string regExp);
+    //把正则表达式看成 a | b | c的形式，以'|'为分隔符号，所以要先获取'|' 的索引
+    vector<int> getOrOperatorIndex(const string regExp);
+    //判断ch是不是字符（字母或数字）
+    bool isLetter(char ch);
+    //获取索引为index的左括号对应的右括号的索引，在初始化NFA的时候会用到
+    int getRightBracketIndex(const string regExp, const int leftIndex);
+    //用于得知id号结点可以有哪些转化
+    vector<int> getConnections(int id);
+};
 
 #endif // UTILITY_H
