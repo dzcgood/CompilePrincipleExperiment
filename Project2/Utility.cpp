@@ -8,6 +8,7 @@
 #include<iostream>
 #include<queue>
 #include<string.h>
+#include<map>
 
 /**
     #####################################################
@@ -450,7 +451,7 @@ vector<int> Proxy::getOrOperatorIndex(const string regExp)
         {
             //忽略掉()内的'|'
             int temp = getRightBracketIndex(regExp, i);
-            if(temp = -1)//说明不存在与之对应的')'
+            if(temp == -1)//说明不存在与之对应的')'
             {
                 std::cout << "illeagal regular expression!";
                 exit(1);
@@ -740,20 +741,239 @@ void Proxy::serializeNFA()
 */
 void Proxy::processDFA()
 {
-
+    //开始建立DFA的边
+    //遍历每一个DFANode
+    for(size_t i = 0; i < dfa.graph.size(); i++)
+    {
+        //取出第i个DFANode
+        DFANode * dfaNode = dfa.graph[i];
+        //开一个map用于记录同一个结点出发的，处理同一个字符的，不同的边
+        //这时候，就可以认为不同的边所指向的结点是相同的，需要进行合并操作
+        map<char, vector<DFANode*>> myMap;
+        //遍历当前EPSILION转换集中的所有结点
+        for(int id : dfaNode ->nodes)
+        {
+            //找到与当前结点有关联（存在边的结点）
+            vector<int> v = this -> getConnections(id);
+            //开始建立从dfaNode到v所在结点的边
+            for(int j : v)
+            {
+                //一般来说转换边结点编号对应的结点是唯一的，即不会被多个集合包含,且结点编号一定是第一个元素
+                DFANode * node = dfa.getNodes(j)[0];
+                //也就是说存在一条从dfaNode到node的用于处理word的边
+                char word = this -> chart[id][j];
+                DFAEdge edge(node, word);
+                //记录下这条边
+                myMap[word].push_back(node);
+            }
+        }
+        //处理相同字符连接不同node的情况
+        map<char, vector<DFANode*>> :: iterator it;
+        for(it = myMap.begin(); it != myMap.end(); it++)
+        {
+            vector<DFANode*> nodes = it -> second;
+            //如果相同的字符连接的不同的node
+            if(nodes.size() >= 2)
+            {
+                //就需要合并这些node
+                for(size_t i = 1; i < nodes.size(); i++)
+                {
+                    nodes[0]->unionNode(nodes[i]);
+                    //从dfa图中删除被合并的node
+                    dfa.delNode(nodes[i]);
+                }
+            }
+        }
+    }
+    //到此为止，DFA图已经建好了，能处理的字符集存储在Proxy类中，接下来设置一下DFA中能处理的字符集
+    dfa.wordList.insert(this -> wordList.begin(), this -> wordList.end());
+    //进行DFA的最小化
+    minimizeDFA();
 }
 
 //最小化DFA
 void Proxy::minimizeDFA()
 {
+    //s1表示非终态集合，s2表示终态集合
+    vector<DFANode *> s1, s2;
+    //先求s1和s2
+    for(DFANode * n : dfa.graph)
+    {
+        if(n -> state == END)
+        {
+            s2.push_back(n);
+        }
+        else
+            s1.push_back(n);
+    }
+    //接下来进行拆分
+    queue<vector<DFANode *>> states;
+    states.push(s1);
+    states.push(s2);
+    //拆分
+    while(!states.empty())
+    {
+        vector<DFANode *> s = states.front();
+        states.pop();
+        if(s.size() == 0)continue;
+        //只有一个元素，就不必拆分，直接加到minDFA就行
+        if(s.size() == 1)
+        {
+            this -> minDFA.push_back(s);
+            continue;
+        }
+        //下面的集合都是包含多个元素的
+        //用于存储拆分出来的集合
+        //例： {{A}, {B, C}, {D}}
+        vector<vector<DFANode *>> subStates;
+        //以集合中第一个元素为标准进行拆分
+        DFANode * node = s[0];
+        //若flag为true，表示集合中的元素没有被拆分过，为false就表示被拆分过
+        bool flag = true;
+        for(size_t i = 1; i < s.size(); i++)
+        {
+            //如果两个结点的转换结果不一样，就需要拆分
+            if(DFA::equals(node, s[i], this -> wordList) == false)
+            {
+                //说明s[i]和node的转换结果不一样，接着就找出s中和s[i]转换结果相同的元素，
+                //把它们合并成一个新的集合
+                vector<DFANode *> curStates;
+                //找出s中和s[i]转换结果相同的元素
+                for(vector<DFANode *>:: iterator it = s.begin() + 1; it != s.end();)
+                {
+                    //如果相同
+                    if(DFA::equals(s[i], *it, this -> wordList))
+                    {
+                        //加到curStates中
+                        curStates.push_back(*it);
+                        //从s中删除
+                        it = s.erase(it);
+                    }
+                    else//不相同
+                        it++;
+                }
+                //设置flag为false，表示已经被拆分过
+                flag = false;
+                subStates.push_back(curStates);
+            }
 
+        }
+        //没被拆分过
+        if(flag)
+        {
+            minDFA.push_back(s);
+        }
+        //被拆分过
+        else
+        {
+            //把新的集合都push到队列中，进行下一次的拆分
+            //其实这里不太理解。。。不是应该已经拆好了吗，干嘛还要再push进去
+            //直接push到minDFA不就行了吗。。。。
+            states.push(s);
+            for(vector<DFANode *> s : subStates)
+            {
+                states.push(s);
+            }
+        }
+    }
+    //最后的处理
+    processMinDFA();
 }
 
+/**
+    判断node是不是在nodes中
+*/
+inline bool belongs(vector<DFANode *> nodes, DFANode * node)
+{
+    for(DFANode * n :nodes)
+    {
+        if(n == node)
+            return true;
+    }
+    return false;
+}
 
-//最小DFA图后处理
+/**
+    判断e有没有出现在edges中，如果没出现，就返回true
+*/
+inline bool isDifferentEdge(vector<DFAEdge> edges, DFAEdge e)
+{
+    for(DFAEdge edge : edges)
+    {
+        if(edge.word == e.word && edge.next ==e.next)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+    现在已经划分好集合了，需要把DFA按照划分好的集合做最后的转换
+*/
 void Proxy::processMinDFA()
 {
+    //当前集合数
+    //{{A}, {BC}, {DEF}}
+    int stateNumber = minDFA.size();
+    //需要做的事情是把处在同一集合的DFANode合成一个新的DFANode，并且生成新的边
+    for(int i = 0; i < stateNumber; i++)
+    {
+        //取出第i个集合
+        vector<DFANode *> curState = minDFA[i];
+        //第i个集合需要建立的新边
+        vector<DFAEdge> curNewEdges;
+        //对于当前集合中的每一个结点
+        for(DFANode * node : curState)
+        {
+            //对每一个结点的每一个边
+            for(DFAEdge edge : node ->edges)
+            {
+                //找到这表边是指向哪个集合的
+                for(int j = 0; j < stateNumber; j++)
+                {
+                    if(belongs(minDFA[j], edge.next))
+                    {
+                        //新建一条边
+                        //因为之后是把同一集合中的元素都合到第一个元素，所以下标取0
+                        DFAEdge newEdge(minDFA[j][0], edge.word);
+                        if(isDifferentEdge(curNewEdges, newEdge))
+                                curNewEdges.push_back(newEdge);
+                    }
+                }
+            }
+        }
 
+        //开始合并元素
+        for(size_t j = 1; j < curState.size(); j++)
+        {
+            curState[0]->unionNode(curState[j]);
+            if(curState[j]->state == END)
+                curState[0]->state = END;
+        }
+
+        curState[0]->edges.clear();
+        curState[0]->edges.assign(curNewEdges.begin(), curNewEdges.end());  // 这个会不会出问题？ 参考vector的=号操作
+        //将合并产生的新节点加到最终的结果中
+        finalDFA.graph.push_back(curState[0]);
+    }
+
+    //给产生好的minDFA的每个结点命名，命名规则是A,B,C,D,.....
+    char name = 'A';
+    for(int i = 0; i < stateNumber; i++)
+    {
+        this -> finalDFA.graph[i]->minName = std::to_string(name++);
+        //如果DFANode包括id为1的点，那么就设置为起点
+        if(this -> finalDFA.graph[i]->contains(1))
+        {
+            this -> finalDFA.minStartNode = this -> finalDFA.graph[i];
+        }
+        //如果状态是END，就设置为结束点
+        if(this -> finalDFA.graph[i] -> state == State::END)
+        {
+            this -> finalDFA.minEndNodes.push_back(this -> finalDFA.graph[i]);
+        }
+    }
 }
 
 
@@ -790,6 +1010,10 @@ vector<int> Proxy::getConnections(int id)
     }
     return con;
 }
+
+
+
+
 
 
 

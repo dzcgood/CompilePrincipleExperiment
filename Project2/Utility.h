@@ -135,6 +135,7 @@ struct DFANode
     //由该结点出发的边
     vector<DFAEdge> edges;
     //不知道这东西是干嘛的、、、、、、、、、、、、、、、、、、
+    //貌似就是给这个结点取个名字，A, B, C, D这样子。。
     string minName;
     //该结点在DFA图中的状态
     State state = NORMAL;
