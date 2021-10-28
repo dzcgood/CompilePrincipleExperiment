@@ -16,7 +16,6 @@ public:
     ~MainWidget();
 
 private slots:
-    void on_tabWidget_clicked(int index);
 
     void on_button_clicked();
 

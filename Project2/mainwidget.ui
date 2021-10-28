@@ -46,7 +46,7 @@
     <widget class="QTableWidget" name="nfaTable">
      <property name="geometry">
       <rect>
-       <x>-10</x>
+       <x>0</x>
        <y>-10</y>
        <width>981</width>
        <height>601</height>
@@ -61,7 +61,7 @@
     <widget class="QTableWidget" name="dfaTable">
      <property name="geometry">
       <rect>
-       <x>-10</x>
+       <x>0</x>
        <y>-10</y>
        <width>981</width>
        <height>601</height>
@@ -73,10 +73,10 @@
     <attribute name="title">
      <string>MinDFA</string>
     </attribute>
-    <widget class="QTextBrowser" name="minDfaTable">
+    <widget class="QTableWidget" name="minDfaTable">
      <property name="geometry">
       <rect>
-       <x>-10</x>
+       <x>0</x>
        <y>-10</y>
        <width>981</width>
        <height>601</height>
@@ -91,7 +91,7 @@
     <widget class="QTextBrowser" name="codeBrowser">
      <property name="geometry">
       <rect>
-       <x>-5</x>
+       <x>0</x>
        <y>-9</y>
        <width>981</width>
        <height>601</height>
@@ -126,10 +126,10 @@
     <string>Execute</string>
    </property>
   </widget>
-  <widget class="QTextEdit" name="input">
+  <widget class="QLineEdit" name="input">
    <property name="geometry">
     <rect>
-     <x>130</x>
+     <x>150</x>
      <y>20</y>
      <width>591</width>
      <height>51</height>

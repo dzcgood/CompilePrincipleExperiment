@@ -55,8 +55,8 @@ void NFA::Or(const NFA &nfa)
     //新建四条边
     NFAEdge edge11(newStartNode, nfa.startNode, EPSILION);
     NFAEdge edge12(newStartNode, this -> startNode, EPSILION);
-    NFAEdge edge21(newEndNode, nfa.endNode, EPSILION);
-    NFAEdge edge22(newStartNode, this -> endNode, EPSILION);
+    NFAEdge edge21(nfa.endNode, newEndNode, EPSILION);
+    NFAEdge edge22(this -> endNode, newEndNode, EPSILION);
     //把边和结点连起来
     newStartNode -> outEdges.push_back(edge11);
     newStartNode -> outEdges.push_back(edge12);
@@ -95,7 +95,7 @@ void NFA::Star()
     NFANode * newEndNode = new NFANode();
     //新建四条边
     NFAEdge edge11(newStartNode, this -> startNode, EPSILION);
-    NFAEdge edge12(newStartNode, this -> endNode, EPSILION);
+    NFAEdge edge12(newStartNode, newEndNode, EPSILION);
     NFAEdge circleEdge(this -> endNode, this -> startNode, EPSILION);
     NFAEdge endEdge(this -> endNode, newEndNode, EPSILION);
     //连起来
@@ -173,7 +173,7 @@ void DFANode::insert(DFAEdge edge)
 */
 void DFANode::unionNode(DFANode * node)
 {
-    nodes.insert(node -> nodes.begin(), node  -> nodes.end());
+    nodes.insert(node -> nodes.begin(), node -> nodes.end());
     edges.insert(edges.end(), node -> edges.begin(), node -> edges.end());
 }
 
@@ -322,12 +322,12 @@ void DFA::getCode(DFANode *n, vector<string> &lines, int tabNumber)
         {
             string value = " ch == ";
             // ch == a
-            value += std::to_string(circleEdges[0].word);
+            value += circleEdges[0].word;
             for(size_t i = 1;i < circleEdges.size(); i++)
             {
                 // ch == a || ch == b
                 value += " || char == ";
-                value += std::to_string(circleEdges[i].word);
+                value += circleEdges[i].word;
             }
             /*
                 while( ch == a || ch == b || .....)
@@ -381,7 +381,7 @@ void DFA::getCode(DFANode *n, vector<string> &lines, int tabNumber)
                 line[0] = getTabs(tabNumber) + (flag == false ? "else " : "")
                         + "if(ch == " + e.word + ")";
                 line[1] = getTabs(tabNumber) + "{";
-                line[2] = getTabs(tabNumber + 1) + "input(ch)";
+                line[2] = getTabs(tabNumber + 1) + "input(ch);";
                 line[3] = getTabs(tabNumber) + "}";
                 /*
                     把这几行加入lines，需要注意的是，这里用到递归，因为下一个结点还会指向下一个结点，
@@ -399,7 +399,7 @@ void DFA::getCode(DFANode *n, vector<string> &lines, int tabNumber)
                 flag = false;
             }
             //最后补上错误信息
-            lines.push_back("else {cout << \"error\"; exit(1);");
+            lines.push_back(getTabs(tabNumber) + "else {cout << \"error\"; exit(1);}");
         }
     }
     //如果这个结点是终止结点，补上完成的信息
@@ -427,6 +427,7 @@ string DFA::getTabs(int tabNumber)
 //构造函数，用正则表达式来初始化Proxy代理类
 Proxy::Proxy(const string regExp)
 {
+    memset(this -> chart, DEFAULT_WORD, sizeof(this -> chart));
     //设置正则表达式
     this -> regularExpression = regExp;
     //产生NFA
@@ -519,7 +520,7 @@ NFA Proxy::getNFA(const string regExp)
         for(size_t i = 0; i < orIndex.size(); i++)
         {
             subReg = regExp.substr(curIndex, orIndex[i] - curIndex);
-            curIndex = orIndex[i];
+            curIndex = orIndex[i] + 1;
             //将字串进行递归，生成的NFA放入NFAs
             NFAs.push_back(getNFA(subReg));
         }
@@ -604,6 +605,7 @@ NFA Proxy::getNFA(const string regExp)
                 {
                     nfa = getNFA(subReg);
                     nfa.Star();
+                    //越过')'和'*'
                     i = rightBacketIndex + 1;
                 }
                 else
@@ -611,7 +613,6 @@ NFA Proxy::getNFA(const string regExp)
                     NFA subNfa = getNFA(subReg);
                     subNfa.Star();
                     nfa.And(subNfa);
-                    i = rightBacketIndex + 1;
                 }
             }
             else//直接连接操作
@@ -729,9 +730,11 @@ void Proxy::serializeNFA()
         //如果此DFANode是终止点，修改其状态
         if(dfaNode -> contains(nfa.getEndId()))
         {
-            nfaNode -> state = END;
+            dfaNode -> state = END;
         }
     }
+    //设置nfa图中的结点个数
+    nfa.nodeNumber = id - 1;
     //进一步处理这些建立好的DFANode
     processDFA();
 }
@@ -763,10 +766,17 @@ void Proxy::processDFA()
                 //也就是说存在一条从dfaNode到node的用于处理word的边
                 char word = this -> chart[id][j];
                 DFAEdge edge(node, word);
+                //这里别搞错了！！！！
+                //是在dfaNode（出发点）中插入edge，而不是node（指向点）中插入edge
+                //可恶啊，害我找的好苦
+                dfaNode -> insert(edge);
                 //记录下这条边
                 myMap[word].push_back(node);
             }
         }
+
+
+
         //处理相同字符连接不同node的情况
         map<char, vector<DFANode*>> :: iterator it;
         for(it = myMap.begin(); it != myMap.end(); it++)
@@ -778,17 +788,23 @@ void Proxy::processDFA()
                 //就需要合并这些node
                 for(size_t i = 1; i < nodes.size(); i++)
                 {
-                    nodes[0]->unionNode(nodes[i]);
+                    nodes[0] -> unionNode(nodes[i]);
                     //从dfa图中删除被合并的node
                     dfa.delNode(nodes[i]);
                 }
             }
         }
     }
+    DFANode * n;
+    for(size_t i = 0; i < dfa.graph.size(); i++)
+    {
+        n = dfa.graph[i];
+    }
     //到此为止，DFA图已经建好了，能处理的字符集存储在Proxy类中，接下来设置一下DFA中能处理的字符集
     dfa.wordList.insert(this -> wordList.begin(), this -> wordList.end());
-    //进行DFA的最小化
-    minimizeDFA();
+
+    //因为DFA的最小化会破坏现有DFA图，所以不能直接执行，要先输出DFA图后在执行最小化
+   // minimizeDFA();
 }
 
 //最小化DFA
@@ -902,10 +918,10 @@ inline bool isDifferentEdge(vector<DFAEdge> edges, DFAEdge e)
     {
         if(edge.word == e.word && edge.next ==e.next)
         {
-            return true;
+            return false;
         }
     }
-    return false;
+    return true;
 }
 
 /**
@@ -960,9 +976,10 @@ void Proxy::processMinDFA()
 
     //给产生好的minDFA的每个结点命名，命名规则是A,B,C,D,.....
     char name = 'A';
+    string s = "";
     for(int i = 0; i < stateNumber; i++)
     {
-        this -> finalDFA.graph[i]->minName = std::to_string(name++);
+        this -> finalDFA.graph[i]->minName = s + name++;
         //如果DFANode包括id为1的点，那么就设置为起点
         if(this -> finalDFA.graph[i]->contains(1))
         {
@@ -990,7 +1007,7 @@ void Proxy::generateCode()
     for(string line : lines)
     {
         code += line;
-        code += std::to_string('\n');
+        code += "\n";
     }
 }
 
