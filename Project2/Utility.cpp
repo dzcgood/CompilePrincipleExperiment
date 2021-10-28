@@ -557,7 +557,7 @@ NFA Proxy::getNFA(const string regExp)
     }
 
     //程序能走到这里，说明regExp已经不包含'|'了，接下来需要对括号进行处理
-
+    //但是括号里还是可能有'|'的
     NFA nfa;
     //记录当前字母和下一个字母
     char cur, next;
@@ -597,7 +597,7 @@ NFA Proxy::getNFA(const string regExp)
                 exit(1);
             }
             //取出括号内的内容
-            string subReg = regExp.substr(i + 1, rightBacketIndex - i - i);
+            string subReg = regExp.substr(i + 1, rightBacketIndex - 1 - i);
             next = regExp[rightBacketIndex + 1];
             if(next == '*')//需要先闭包后连接
             {
@@ -613,6 +613,7 @@ NFA Proxy::getNFA(const string regExp)
                     NFA subNfa = getNFA(subReg);
                     subNfa.Star();
                     nfa.And(subNfa);
+                    i = rightBacketIndex + 1;
                 }
             }
             else//直接连接操作
@@ -625,6 +626,7 @@ NFA Proxy::getNFA(const string regExp)
                 {
                     nfa.And(getNFA(subReg));
                 }
+                i = rightBacketIndex;
             }
         }
     }
