@@ -8,5 +8,7 @@
 
 代码参考的是之前师兄的，在此基础上做了点修改，加了点注释。（花了好久才看懂代码的说。。。是我太菜了）
 
+2021/10/28更新：修改了原作者的几个bug。。。。。。。 目前对于形如(a|b)c还是会出错
+
 原仓库地址：https://github.com/SeanLiaoy/Experiment-Of-Compiler-Principles
 
