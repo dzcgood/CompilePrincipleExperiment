@@ -208,3 +208,20 @@ void MainWindow::outputLog()
 }
 
 
+/**
+    保存处理好的文法
+*/
+void MainWindow::on_pushButton_3_clicked()
+{
+    string str = getProcessedGrammers();
+    ofstream file;
+    file.open("processedGrammers.txt");
+    if(!file.is_open())
+    {
+        QMessageBox::about(NULL,"Warning","Fail to save grammers!");
+        return;
+    }
+    file << str;
+    file.close();
+    QMessageBox::about(NULL,"提示","修改好的文法已保存在processedGrammers.txt");
+}
