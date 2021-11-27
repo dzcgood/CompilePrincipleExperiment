@@ -197,7 +197,7 @@ while(有follow集合在变化)
                 把follow(A)添加到follow(Xi)
 ```
 
-![求follow集合](C:/Users/DzcGood/Desktop/%E6%B1%82follow%E9%9B%86%E5%90%88.jpg)
+![求follow集合](https://gitee.com/dzcgood/img-bed/raw/master/img/%E6%B1%82follow%E9%9B%86%E5%90%88.jpg)
 
 
 
