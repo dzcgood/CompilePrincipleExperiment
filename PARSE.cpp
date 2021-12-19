@@ -197,7 +197,7 @@ TreeNode* write_stmt(void)
 {
     TreeNode* t = newStmtNode(WriteK);
     match(WRITE);
-    if (t != NULL) t->child[0] = exp1();
+    if (t != NULL) t->child[0] = simple_exp();
     match(SEMI);
     return t;
 }
@@ -500,7 +500,7 @@ TreeNode* regExp3(void)
     return t;
 }
 
-//regExp4 -> ID | (RE)
+//regExp4 -> ID | (regExp1)
 TreeNode* regExp4(void)
 {
     TreeNode* t = NULL;
@@ -513,7 +513,7 @@ TreeNode* regExp4(void)
         break;
     case LPAREN:
         match(LPAREN);
-        t = simple_exp();//modified
+        t = regExp1();//modified
         match(RPAREN);
         break;
     default:

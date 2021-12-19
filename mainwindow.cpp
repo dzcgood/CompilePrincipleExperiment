@@ -98,7 +98,6 @@ void MainWindow::on_pushButton_2_clicked()
     fprintf(log1, "Open file %s successfully", pgm);
 
     listing = log2; /* send listing to screen */
-    fprintf(listing,"\nTINY COMPILATION: %s\n",pgm);
 
     TreeNode *syntaxTree;
     syntaxTree = parse();
