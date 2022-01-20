@@ -1,0 +1,4 @@
+if a > 1 and b <= 5 or c <> 1
+then
+write hello;
+end
